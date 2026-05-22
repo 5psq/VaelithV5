@@ -44,7 +44,7 @@ while ($true) {
     Write-Host "   ╚████╔╝ ██║  ██║███████╗███████╗██║   ██║   ██║  ██║" -ForegroundColor $C_Info
     Write-Host "    ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝" -ForegroundColor $C_Info
     Write-Host "  =======================================================" -ForegroundColor $C_Dim
-    Write-Host "                discord.gg/vaelithh INTERFACE            " -ForegroundColor $C_White
+    Write-Host "                   discord.gg/vaelithh                   " -ForegroundColor $C_White
     Write-Host "  =======================================================" -ForegroundColor $C_Dim
     Write-Host "    [7] PC SPECS + RESET DATE"  -ForegroundColor $C_Info
     Write-Host "    [6] LAST ACTIVITY VIEWER"   -ForegroundColor $C_Magenta
@@ -1187,19 +1187,531 @@ while ($true) {
         }
 
         "2" {
-            Write-Host "BAM Keys Viewer logic here..."
+            # =========================================================
+            # --- [2] BAM KEYS VIEWER ---------------------------------
+            # =========================================================
+            Clear-Host
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Info
+            Write-Host "           BAM KEYS VIEWER                  " -ForegroundColor $C_White
+            Write-Host "   Background Activity Monitor — Execution   " -ForegroundColor $C_Dim
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+            Write-Host "  Tracks every binary executed, with timestamp." -ForegroundColor $C_Dim
+            Write-Host "  Survives reboots. Stored per user SID."       -ForegroundColor $C_Dim
+            Write-Host ""
+
+            $bamRoots = @(
+                "HKLM:\SYSTEM\ControlSet001\Services\bam\State\UserSettings",
+                "HKLM:\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings"
+            )
+
+            $userSIDs = Get-ChildItem "Registry::HKEY_USERS" -ErrorAction SilentlyContinue |
+                Where-Object { $_.PSChildName -match "^S-1-5-21-\d+-\d+-\d+-\d+$" } |
+                Select-Object -ExpandProperty PSChildName
+
+            # Try to resolve SID to username
+            function Get-UsernameFromSID {
+                param([string]$sid)
+                try {
+                    $objSID  = New-Object System.Security.Principal.SecurityIdentifier($sid)
+                    $objUser = $objSID.Translate([System.Security.Principal.NTAccount])
+                    return $objUser.Value
+                } catch {
+                    return $sid
+                }
+            }
+
+            $totalEntries = 0
+            $bamFound     = $false
+
+            foreach ($bamRoot in $bamRoots) {
+                if (-not (Test-Path $bamRoot -ErrorAction SilentlyContinue)) { continue }
+
+                foreach ($sid in $userSIDs) {
+                    $bamPath = "$bamRoot\$sid"
+                    if (-not (Test-Path $bamPath -ErrorAction SilentlyContinue)) { continue }
+
+                    $username = Get-UsernameFromSID $sid
+                    Write-Host "  ── User: $username" -ForegroundColor $C_Info
+                    Write-Host "     SID : $sid"      -ForegroundColor $C_Dim
+                    Write-Host ""
+
+                    $props = Get-ItemProperty -Path $bamPath -ErrorAction SilentlyContinue
+                    if ($null -eq $props) { continue }
+
+                    $entries = @()
+                    foreach ($prop in $props.PSObject.Properties) {
+                        if ($prop.Name -match "^PS") { continue }
+                        if ($prop.Name -match "^SequenceNumber$|^Version$") { continue }
+
+                        # Decode FILETIME timestamp from binary value
+                        $timestamp = "N/A"
+                        try {
+                            if ($prop.Value -is [byte[]] -and $prop.Value.Length -ge 8) {
+                                $ft = [System.BitConverter]::ToInt64($prop.Value, 0)
+                                if ($ft -gt 0) {
+                                    $timestamp = [datetime]::FromFileTime($ft).ToString("dd/MM/yyyy  HH:mm:ss")
+                                }
+                            }
+                        } catch { }
+
+                        $entries += [PSCustomObject]@{
+                            Executable = $prop.Name
+                            Timestamp  = $timestamp
+                        }
+                        $totalEntries++
+                    }
+
+                    # Sort by timestamp descending
+                    $entries = $entries | Sort-Object { 
+                        try { [datetime]::ParseExact($_.Timestamp, "dd/MM/yyyy  HH:mm:ss", $null) } 
+                        catch { [datetime]::MinValue }
+                    } -Descending
+
+                    foreach ($entry in $entries) {
+                        Write-Host "    [" -NoNewline -ForegroundColor $C_Dim
+                        Write-Host "$($entry.Timestamp)" -NoNewline -ForegroundColor $C_Warn
+                        Write-Host "] " -NoNewline -ForegroundColor $C_Dim
+                        Write-Host "$($entry.Executable)" -ForegroundColor $C_White
+                    }
+
+                    if ($entries.Count -eq 0) {
+                        Write-Host "    No BAM entries found for this user." -ForegroundColor $C_Dim
+                    }
+
+                    $bamFound = $true
+                    Write-Host ""
+                }
+                break  # Avoid duplicate from both ControlSets
+            }
+
+            if (-not $bamFound) {
+                Write-Host "  [INFO] No BAM entries found on this system." -ForegroundColor $C_Dim
+                Write-Host "  BAM may be disabled or no user activity recorded yet." -ForegroundColor $C_Dim
+            }
+
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+            Write-Host "  Total entries found: $totalEntries" -ForegroundColor $C_Info
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
             Read-Host "`nPress Enter to return to menu..."
         }
+
         "4" {
-            Write-Host "Prefetch Viewer logic here..."
+            # =========================================================
+            # --- [4] PREFETCH VIEWER ---------------------------------
+            # =========================================================
+            Clear-Host
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Info
+            Write-Host "            PREFETCH VIEWER                 " -ForegroundColor $C_White
+            Write-Host "   Windows caches app execution data here   " -ForegroundColor $C_Dim
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+            Write-Host "  Each .pf file = one executed application." -ForegroundColor $C_Dim
+            Write-Host "  LastWriteTime = last time it was run."     -ForegroundColor $C_Dim
+            Write-Host ""
+
+            $prefetchPath = "$env:WINDIR\Prefetch"
+
+            if (-not (Test-Path $prefetchPath)) {
+                Write-Host "  [WARN] Prefetch folder not found: $prefetchPath" -ForegroundColor $C_Warn
+                Write-Host "  Prefetch may be disabled on this system (common on SSDs)." -ForegroundColor $C_Dim
+                Read-Host "`nPress Enter to return to menu..."
+                continue
+            }
+
+            $pfFiles = Get-ChildItem -Path $prefetchPath -Filter "*.pf" -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending
+
+            if ($pfFiles.Count -eq 0) {
+                Write-Host "  [INFO] No Prefetch files found." -ForegroundColor $C_Dim
+                Read-Host "`nPress Enter to return to menu..."
+                continue
+            }
+
+            Write-Host "  Found $($pfFiles.Count) prefetch entries — sorted by most recent execution:" -ForegroundColor $C_Info
+            Write-Host ""
+            Write-Host ("  " + "LAST EXECUTED".PadRight(22) + "  " + "APPLICATION") -ForegroundColor $C_Dim
+            Write-Host "  ──────────────────────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $counter = 0
+            foreach ($pf in $pfFiles) {
+                $counter++
+                $appName   = $pf.BaseName -replace "-[A-F0-9]{8}$", ""
+                $lastRun   = $pf.LastWriteTime.ToString("dd/MM/yyyy  HH:mm:ss")
+                $sizeKB    = [math]::Round($pf.Length / 1KB, 1)
+
+                $color = if ($counter -le 10) { $C_Found } elseif ($counter -le 30) { $C_Warn } else { $C_White }
+
+                Write-Host ("  " + $lastRun.PadRight(22) + "  ") -NoNewline -ForegroundColor $C_Dim
+                Write-Host $appName -ForegroundColor $color
+            }
+
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+            Write-Host "  Total: $($pfFiles.Count) entries" -ForegroundColor $C_Info
+
+            # Export option
+            Write-Host ""
+            $exportChoice = Read-Host "  Export to TXT on Desktop? (y/n)"
+            if ($exportChoice -eq "y" -or $exportChoice -eq "Y") {
+                $exportPath = "$env:USERPROFILE\Desktop\VAELITH_Prefetch_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+                try {
+                    $header = "VAELITH V4 — Prefetch Viewer`nDate   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`nSystem : $env:COMPUTERNAME`nTotal  : $($pfFiles.Count) entries`n" + ("=" * 60) + "`n`n"
+                    $lines  = $pfFiles | ForEach-Object {
+                        $n = $_.BaseName -replace "-[A-F0-9]{8}$", ""
+                        "$($_.LastWriteTime.ToString('dd/MM/yyyy HH:mm:ss'))   $n"
+                    }
+                    ($header + ($lines -join "`n")) | Out-File -FilePath $exportPath -Encoding UTF8
+                    Write-Host "  [SAVED] $exportPath" -ForegroundColor $C_Info
+                } catch {
+                    Write-Host "  [WARN] Could not save: $($_.Exception.Message)" -ForegroundColor $C_Warn
+                }
+            }
+
             Read-Host "`nPress Enter to return to menu..."
         }
+
         "5" {
-            Write-Host "Process Explorer logic here..."
+            # =========================================================
+            # --- [5] PROCESS EXPLORER --------------------------------
+            # =========================================================
+            Clear-Host
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Info
+            Write-Host "            PROCESS EXPLORER                " -ForegroundColor $C_White
+            Write-Host "      Live snapshot of running processes     " -ForegroundColor $C_Dim
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+            Write-Host ""
+
+            Write-Host "  Collecting process data..." -ForegroundColor $C_Dim
+            Write-Host ""
+
+            try {
+                $processes = Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending
+
+                # Get owner info via WMI (slower but accurate)
+                $wmiProcs = @{}
+                try {
+                    Get-WmiObject Win32_Process -ErrorAction SilentlyContinue | ForEach-Object {
+                        $owner = $_.GetOwner()
+                        $wmiProcs[$_.ProcessId] = if ($owner.User) { "$($owner.Domain)\$($owner.User)" } else { "SYSTEM" }
+                    }
+                } catch { }
+
+                Write-Host ("  " + "PID".PadRight(8) + "CPU(s)".PadRight(10) + "MEM(MB)".PadRight(10) + "OWNER".PadRight(25) + "PROCESS") -ForegroundColor $C_Dim
+                Write-Host "  ──────────────────────────────────────────────────────────────────────" -ForegroundColor $C_Dim
+
+                $suspicious = @("mimikatz","meterpreter","rat","keylog","inject","hook","dump","hack","cheat","bypass","spoof","ghost")
+
+                foreach ($proc in $processes) {
+                    $pid_    = $proc.Id
+                    $name    = $proc.Name
+                    $cpuS    = [math]::Round($proc.CPU, 1)
+                    $memMB   = [math]::Round($proc.WorkingSet64 / 1MB, 1)
+                    $owner   = if ($wmiProcs.ContainsKey($pid_)) { $wmiProcs[$pid_] } else { "N/A" }
+
+                    # Flag suspicious process names
+                    $isSusp  = $suspicious | Where-Object { $name -match $_ }
+                    $color   = if ($isSusp) { $C_Found } elseif ($cpuS -gt 50) { $C_Warn } else { $C_White }
+
+                    $flag = if ($isSusp) { " [!]" } else { "" }
+
+                    Write-Host ("  " + "$pid_".PadRight(8) + "$cpuS".PadRight(10) + "$memMB".PadRight(10) + $owner.PadRight(25)) -NoNewline -ForegroundColor $C_Dim
+                    Write-Host "$name$flag" -ForegroundColor $color
+                }
+
+                Write-Host ""
+                Write-Host "  ==========================================" -ForegroundColor $C_Dim
+                Write-Host "  Total processes: $($processes.Count)" -ForegroundColor $C_Info
+                Write-Host "  [!] = Potentially suspicious name" -ForegroundColor $C_Found
+
+                # Show full path for suspicious ones
+                $suspProcs = $processes | Where-Object { $name = $_.Name; $suspicious | Where-Object { $name -match $_ } }
+                if ($suspProcs) {
+                    Write-Host ""
+                    Write-Host "  SUSPICIOUS PROCESS DETAILS:" -ForegroundColor $C_Found
+                    foreach ($sp in $suspProcs) {
+                        Write-Host "    PID $($sp.Id) — $($sp.Name)" -ForegroundColor $C_Found
+                        try {
+                            $path = (Get-WmiObject Win32_Process -Filter "ProcessId=$($sp.Id)" -ErrorAction SilentlyContinue).ExecutablePath
+                            Write-Host "    Path: $path" -ForegroundColor $C_Warn
+                        } catch { }
+                    }
+                }
+
+                # Export option
+                Write-Host ""
+                $exportChoice = Read-Host "  Export process list to Desktop? (y/n)"
+                if ($exportChoice -eq "y" -or $exportChoice -eq "Y") {
+                    $exportPath = "$env:USERPROFILE\Desktop\VAELITH_Processes_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+                    try {
+                        $header = "VAELITH V4 — Process Explorer`nDate   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`nSystem : $env:COMPUTERNAME`nTotal  : $($processes.Count) processes`n" + ("=" * 60) + "`n`n"
+                        $body   = $processes | Select-Object Id, Name, CPU, @{N="MemMB";E={[math]::Round($_.WorkingSet64/1MB,1)}} | Format-Table -AutoSize | Out-String
+                        ($header + $body) | Out-File -FilePath $exportPath -Encoding UTF8
+                        Write-Host "  [SAVED] $exportPath" -ForegroundColor $C_Info
+                    } catch {
+                        Write-Host "  [WARN] Could not save: $($_.Exception.Message)" -ForegroundColor $C_Warn
+                    }
+                }
+
+            } catch {
+                Write-Host "  [ERROR] Could not enumerate processes: $($_.Exception.Message)" -ForegroundColor $C_Found
+            }
+
             Read-Host "`nPress Enter to return to menu..."
         }
+
         "6" {
-            Write-Host "Last Activity Viewer logic here..."
+            # =========================================================
+            # --- [6] LAST ACTIVITY VIEWER ----------------------------
+            # =========================================================
+            Clear-Host
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Info
+            Write-Host "          LAST ACTIVITY VIEWER              " -ForegroundColor $C_White
+            Write-Host "    Recent files, searches, apps & logins   " -ForegroundColor $C_Dim
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+            Write-Host ""
+
+            # --- RECENT FILES (Shell Recent) ---
+            Write-Host "  [ RECENT FILES — Last 20 Opened ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $recentPath = "$env:APPDATA\Microsoft\Windows\Recent"
+            if (Test-Path $recentPath) {
+                $recentFiles = Get-ChildItem -Path $recentPath -Filter "*.lnk" -Force -ErrorAction SilentlyContinue |
+                    Sort-Object LastWriteTime -Descending |
+                    Select-Object -First 20
+
+                $wshell2 = New-Object -ComObject WScript.Shell -ErrorAction SilentlyContinue
+                foreach ($lnk in $recentFiles) {
+                    $target = ""
+                    try {
+                        if ($null -ne $wshell2) {
+                            $sc     = $wshell2.CreateShortcut($lnk.FullName)
+                            $target = $sc.TargetPath
+                        }
+                    } catch { }
+                    $displayName = if ($target) { $target } else { $lnk.BaseName }
+                    Write-Host ("  " + $lnk.LastWriteTime.ToString("dd/MM/yyyy  HH:mm:ss").PadRight(22) + "  ") -NoNewline -ForegroundColor $C_Dim
+                    Write-Host $displayName -ForegroundColor $C_White
+                }
+            } else {
+                Write-Host "  [INFO] Recent folder not found." -ForegroundColor $C_Dim
+            }
+
+            Write-Host ""
+
+            # --- EXPLORER SEARCH HISTORY (WordWheelQuery) ---
+            Write-Host "  [ EXPLORER SEARCH HISTORY ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $wwqPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\WordWheelQuery"
+            $searchTermsFound = $false
+            if (Test-Path $wwqPath -ErrorAction SilentlyContinue) {
+                $wwqProps = Get-ItemProperty -Path $wwqPath -ErrorAction SilentlyContinue
+                if ($null -ne $wwqProps) {
+                    $searchEntries = @()
+                    foreach ($prop in $wwqProps.PSObject.Properties) {
+                        if ($prop.Name -match "^PS|^MRUListEx$") { continue }
+                        $valStr = ""
+                        try {
+                            if ($prop.Value -is [byte[]]) { $valStr = [System.Text.Encoding]::Unicode.GetString($prop.Value).TrimEnd([char]0) }
+                            else { $valStr = [string]$prop.Value }
+                        } catch { }
+                        if ($valStr) { $searchEntries += $valStr }
+                    }
+                    if ($searchEntries.Count -gt 0) {
+                        $searchEntries | ForEach-Object { Write-Host "    >> $_" -ForegroundColor $C_Warn }
+                        $searchTermsFound = $true
+                    }
+                }
+            }
+            if (-not $searchTermsFound) {
+                Write-Host "  [CLEAN] No Explorer search history found." -ForegroundColor $C_Clean
+            }
+
+            Write-Host ""
+
+            # --- RUN DIALOG HISTORY (Win+R) ---
+            Write-Host "  [ RUN DIALOG HISTORY (Win+R) ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $runMRU = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU"
+            $runFound = $false
+            if (Test-Path $runMRU -ErrorAction SilentlyContinue) {
+                $runProps = Get-ItemProperty -Path $runMRU -ErrorAction SilentlyContinue
+                if ($null -ne $runProps) {
+                    foreach ($prop in $runProps.PSObject.Properties) {
+                        if ($prop.Name -match "^PS|^MRUList$") { continue }
+                        Write-Host "    >> $($prop.Value)" -ForegroundColor $C_Warn
+                        $runFound = $true
+                    }
+                }
+            }
+            if (-not $runFound) { Write-Host "  [CLEAN] No Run dialog history found." -ForegroundColor $C_Clean }
+
+            Write-Host ""
+
+            # --- TYPED PATHS (Explorer Address Bar) ---
+            Write-Host "  [ TYPED PATHS (Explorer Address Bar) ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $typedPaths = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\TypedPaths"
+            $tpFound = $false
+            if (Test-Path $typedPaths -ErrorAction SilentlyContinue) {
+                $tpProps = Get-ItemProperty -Path $typedPaths -ErrorAction SilentlyContinue
+                if ($null -ne $tpProps) {
+                    foreach ($prop in $tpProps.PSObject.Properties) {
+                        if ($prop.Name -match "^PS") { continue }
+                        Write-Host "    >> $($prop.Value)" -ForegroundColor $C_Warn
+                        $tpFound = $true
+                    }
+                }
+            }
+            if (-not $tpFound) { Write-Host "  [CLEAN] No typed paths found." -ForegroundColor $C_Clean }
+
+            Write-Host ""
+
+            # --- LAST LOGIN EVENTS ---
+            Write-Host "  [ LAST LOGIN / LOGOFF EVENTS ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            try {
+                $loginEvents = Get-WinEvent -FilterHashtable @{
+                    LogName = 'Security'
+                    Id      = @(4624, 4634, 4647, 4800, 4801)
+                } -MaxEvents 20 -ErrorAction SilentlyContinue | Sort-Object TimeCreated -Descending
+
+                if ($loginEvents) {
+                    foreach ($evt in $loginEvents) {
+                        $label = switch ($evt.Id) {
+                            4624  { "LOGON " }
+                            4634  { "LOGOFF" }
+                            4647  { "LOGOFF" }
+                            4800  { "LOCKED" }
+                            4801  { "UNLOCK" }
+                            default { "EVENT " }
+                        }
+                        $color = switch ($evt.Id) {
+                            4624  { $C_Clean }
+                            4634  { $C_Dim }
+                            4647  { $C_Dim }
+                            4800  { $C_Warn }
+                            4801  { $C_Info }
+                            default { $C_White }
+                        }
+                        Write-Host ("  [$label] " ) -NoNewline -ForegroundColor $color
+                        Write-Host $evt.TimeCreated.ToString("dd/MM/yyyy  HH:mm:ss") -ForegroundColor $C_White
+                    }
+                } else {
+                    Write-Host "  [INFO] No login events found (may need audit policy enabled)." -ForegroundColor $C_Dim
+                }
+            } catch {
+                Write-Host "  [SKIP] Cannot read Security log: $($_.Exception.Message)" -ForegroundColor $C_Dim
+            }
+
+            Write-Host ""
+
+            # --- RECENTLY INSTALLED PROGRAMS ---
+            Write-Host "  [ RECENTLY INSTALLED PROGRAMS (last 30 days) ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $uninstallPaths = @(
+                "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+                "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
+            )
+
+            $cutoff = (Get-Date).AddDays(-30)
+            $recentInstalls = @()
+
+            foreach ($uPath in $uninstallPaths) {
+                if (Test-Path $uPath -ErrorAction SilentlyContinue) {
+                    Get-ChildItem -Path $uPath -ErrorAction SilentlyContinue | ForEach-Object {
+                        $props = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+                        if ($null -ne $props -and $props.DisplayName -and $props.InstallDate) {
+                            try {
+                                $installDate = [datetime]::ParseExact($props.InstallDate.ToString(), "yyyyMMdd", $null)
+                                if ($installDate -ge $cutoff) {
+                                    $recentInstalls += [PSCustomObject]@{
+                                        Date    = $installDate
+                                        Program = $props.DisplayName
+                                        Version = $props.DisplayVersion
+                                    }
+                                }
+                            } catch { }
+                        }
+                    }
+                }
+            }
+
+            if ($recentInstalls.Count -gt 0) {
+                $recentInstalls | Sort-Object Date -Descending | ForEach-Object {
+                    Write-Host ("  " + $_.Date.ToString("dd/MM/yyyy").PadRight(14)) -NoNewline -ForegroundColor $C_Dim
+                    Write-Host "$($_.Program)  " -NoNewline -ForegroundColor $C_White
+                    Write-Host "v$($_.Version)" -ForegroundColor $C_Dim
+                }
+            } else {
+                Write-Host "  [CLEAN] No programs installed in the last 30 days." -ForegroundColor $C_Clean
+            }
+
+            Write-Host ""
+
+            # --- RECENTLY ACCESSED USB DEVICES ---
+            Write-Host "  [ USB DEVICES HISTORY ]" -ForegroundColor $C_Info
+            Write-Host "  ──────────────────────────────────────────" -ForegroundColor $C_Dim
+
+            $usbPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\USBSTOR"
+            $usbFound = $false
+            if (Test-Path $usbPath -ErrorAction SilentlyContinue) {
+                Get-ChildItem -Path $usbPath -ErrorAction SilentlyContinue | ForEach-Object {
+                    $deviceType = $_.PSChildName
+                    Get-ChildItem -Path $_.PSPath -ErrorAction SilentlyContinue | ForEach-Object {
+                        $props = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+                        $friendlyName = $props.FriendlyName
+                        if ($friendlyName) {
+                            Write-Host "    >> $friendlyName" -ForegroundColor $C_Warn
+                            Write-Host "       Type: $deviceType" -ForegroundColor $C_Dim
+                            $usbFound = $true
+                        }
+                    }
+                }
+            }
+            if (-not $usbFound) { Write-Host "  [CLEAN] No USB storage devices found in registry." -ForegroundColor $C_Clean }
+
+            Write-Host ""
+            Write-Host "  ==========================================" -ForegroundColor $C_Dim
+
+            # Export option
+            $exportChoice = Read-Host "  Export activity report to Desktop? (y/n)"
+            if ($exportChoice -eq "y" -or $exportChoice -eq "Y") {
+                $exportPath = "$env:USERPROFILE\Desktop\VAELITH_Activity_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+                try {
+                    $out = "VAELITH V4 — Last Activity Viewer`nDate   : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`nSystem : $env:COMPUTERNAME ($env:USERNAME)`n" + ("=" * 60) + "`n`n"
+
+                    $out += "=== RECENT FILES ===`n"
+                    if (Test-Path $recentPath) {
+                        Get-ChildItem -Path $recentPath -Filter "*.lnk" -Force -ErrorAction SilentlyContinue |
+                            Sort-Object LastWriteTime -Descending | Select-Object -First 30 |
+                            ForEach-Object { $out += "$($_.LastWriteTime.ToString('dd/MM/yyyy HH:mm:ss'))   $($_.BaseName)`n" }
+                    }
+
+                    $out += "`n=== RECENTLY INSTALLED (30 days) ===`n"
+                    if ($recentInstalls.Count -gt 0) {
+                        $recentInstalls | Sort-Object Date -Descending | ForEach-Object {
+                            $out += "$($_.Date.ToString('dd/MM/yyyy'))   $($_.Program)  v$($_.Version)`n"
+                        }
+                    }
+
+                    $out | Out-File -FilePath $exportPath -Encoding UTF8
+                    Write-Host "  [SAVED] $exportPath" -ForegroundColor $C_Info
+                } catch {
+                    Write-Host "  [WARN] Could not save: $($_.Exception.Message)" -ForegroundColor $C_Warn
+                }
+            }
+
             Read-Host "`nPress Enter to return to menu..."
         }
         "0" {
