@@ -44,7 +44,7 @@ while ($true) {
     Write-Host "   ╚████╔╝ ██║  ██║███████╗███████╗██║   ██║   ██║  ██║" -ForegroundColor $C_Info
     Write-Host "    ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝" -ForegroundColor $C_Info
     Write-Host "  =======================================================" -ForegroundColor $C_Dim
-    Write-Host "                   discord.gg/vaelithh                   " -ForegroundColor $C_White
+    Write-Host "                discord.gg/vaelithh INTERFACE            " -ForegroundColor $C_White
     Write-Host "  =======================================================" -ForegroundColor $C_Dim
     Write-Host "    [7] PC SPECS + RESET DATE"  -ForegroundColor $C_Info
     Write-Host "    [6] LAST ACTIVITY VIEWER"   -ForegroundColor $C_Magenta
@@ -1402,7 +1402,7 @@ while ($true) {
                 Write-Host ("  " + "PID".PadRight(8) + "CPU(s)".PadRight(10) + "MEM(MB)".PadRight(10) + "OWNER".PadRight(25) + "PROCESS") -ForegroundColor $C_Dim
                 Write-Host "  ──────────────────────────────────────────────────────────────────────" -ForegroundColor $C_Dim
 
-                $suspicious = @("mimikatz","meterpreter","rat","keylog","inject","hook","dump","hack","cheat","bypass","spoof","ghost")
+                $suspicious = @("valex","matrix","matcha","xeno","solara","zerphy")
 
                 foreach ($proc in $processes) {
                     $pid_    = $proc.Id
@@ -1424,7 +1424,7 @@ while ($true) {
                 Write-Host ""
                 Write-Host "  ==========================================" -ForegroundColor $C_Dim
                 Write-Host "  Total processes: $($processes.Count)" -ForegroundColor $C_Info
-                Write-Host "  [!] = Potentially suspicious name" -ForegroundColor $C_Found
+                Write-Host "  [!] = Target detected (VALEX, MATRIX, MATCHA, XENO, SOLARA, ZERPHY)" -ForegroundColor $C_Found
 
                 # Show full path for suspicious ones
                 $suspProcs = $processes | Where-Object { $name = $_.Name; $suspicious | Where-Object { $name -match $_ } }
