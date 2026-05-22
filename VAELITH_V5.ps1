@@ -44,7 +44,7 @@ while ($true) {
     Write-Host "   ╚████╔╝ ██║  ██║███████╗███████╗██║   ██║   ██║  ██║" -ForegroundColor $C_Info
     Write-Host "    ╚═══╝  ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝   ╚═╝   ╚═╝  ╚═╝" -ForegroundColor $C_Info
     Write-Host "  =======================================================" -ForegroundColor $C_Dim
-    Write-Host "                discord.gg/vaelithh INTERFACE            " -ForegroundColor $C_White
+    Write-Host "                  discord.gg/vaelithh                    " -ForegroundColor $C_White
     Write-Host "  =======================================================" -ForegroundColor $C_Dim
     Write-Host "    [7] PC SPECS + RESET DATE"  -ForegroundColor $C_Info
     Write-Host "    [6] LAST ACTIVITY VIEWER"   -ForegroundColor $C_Magenta
